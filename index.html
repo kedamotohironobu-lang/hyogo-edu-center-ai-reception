@@ -1,98 +1,52 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover"
-  >
-  <meta name="description" content="兵庫県立総合教育センター 一般AI音声受付案内">
-  <title>兵庫県立総合教育センター AI音声受付案内</title>
-
-  <style>
-    :root {
-      color-scheme: light;
-      font-family:
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        "Hiragino Kaku Gothic ProN",
-        "Yu Gothic",
-        Meiryo,
-        sans-serif;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      min-height: 100vh;
-      margin: 0;
-      display: grid;
-      place-items: center;
-      padding: 24px;
-      color: #17324d;
-      background:
-        radial-gradient(circle at top, #eef8ff 0, transparent 48%),
-        linear-gradient(160deg, #f8fbff 0%, #e8f4ff 100%);
-    }
-
-    main {
-      width: min(100%, 680px);
-      padding: 32px 24px;
-      text-align: center;
-      background: rgba(255, 255, 255, 0.96);
-      border: 1px solid #d7e8f5;
-      border-radius: 24px;
-      box-shadow: 0 16px 44px rgba(25, 75, 115, 0.12);
-    }
-
-    .status {
-      display: inline-block;
-      margin-bottom: 20px;
-      padding: 7px 14px;
-      color: #12613b;
-      background: #e7f8ef;
-      border-radius: 999px;
-      font-weight: 700;
-    }
-
-    h1 {
-      margin: 0 0 16px;
-      font-size: clamp(1.6rem, 5vw, 2.4rem);
-      line-height: 1.4;
-    }
-
-    p {
-      margin: 10px 0;
-      font-size: 1.05rem;
-      line-height: 1.8;
-    }
-
-    .notice {
-      margin-top: 24px;
-      padding: 18px;
-      text-align: left;
-      background: #f4f9fd;
-      border-radius: 16px;
-    }
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="兵庫県立総合教育センターの一般受付。音声または文字でお問い合わせいただけます。">
+  <meta name="referrer" content="no-referrer">
+  <title>一般受付｜兵庫県立総合教育センター</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js" defer></script>
+  <script type="module" src="app.js"></script>
 </head>
-
 <body>
-  <main>
-    <div class="status">基盤分離確認用ページ</div>
-
-    <h1>兵庫県立総合教育センター<br>AI音声受付案内</h1>
-
-    <p>一般受付版の公開準備ができました。</p>
-    <p>現在、音声受付機能を構築しています。</p>
-
-    <div class="notice">
-      このページは公開講座受付とは別に構築した、
-      一般的なお問い合わせのための受付システムです。
+  <a class="skip" href="#main">受付へ移動</a>
+  <header><div><span class="eyebrow">兵庫県立総合教育センター</span><h1>一般受付</h1></div><span class="badge">試験運用版 0.2</span></header>
+  <main id="main">
+    <section id="setup" class="notice" role="status">接続設定を確認しています。</section>
+    <div class="workspace">
+      <aside class="assistant-panel" aria-label="音声受付">
+        <div class="portrait"><picture><source media="(max-width: 720px)" srcset="assets/receptionist-mobile.png"><img id="guide" src="assets/receptionist-desktop.png" alt="受付スタッフのイメージ" width="440" height="440"></picture></div>
+        <h2>ご用件をお聞かせください</h2>
+        <p id="state" role="status">音声・文字のどちらでも利用できます。</p>
+        <div class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="preferences"><label><input id="readAloud" type="checkbox" checked> 回答を読み上げる</label><button id="stopSpeech" class="text-button">読み上げ停止</button></div>
+        <p class="small">受付は最大10分です。判断が必要な内容は、途中でも担当課をご案内します。</p>
+      </aside>
+      <section class="conversation" aria-label="相談内容">
+        <div class="session-bar"><span id="receipt">受付前</span><span id="clock" aria-label="残り時間">10:00</span></div>
+        <div id="consentBox" class="consent">
+          <h2>ご利用の前に</h2>
+          <p>送信した相談内容・回答・担当課案内を、受付記録としてGoogleスプレッドシートに保存します。氏名や児童生徒を特定できる情報、詳しい心身の情報は入力しないでください。</p>
+          <p>音声入力は端末・ブラウザの音声認識を使用します。音声が外部の認識サービスに送信される場合があります。本システムでは録音ファイルを保存しません。</p>
+          <label><input id="consent" type="checkbox"> 上記を確認し、受付記録の保存に同意します</label>
+          <button id="start" class="primary" disabled>受付を始める</button>
+        </div>
+        <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
+        <div id="choices" class="choices"></div>
+        <section id="handoff" class="handoff" hidden aria-label="担当課のご案内"></section>
+        <form id="form">
+          <label for="question">ご用件 <span class="small">音声入力後も、内容を確認してから送信できます。</span></label>
+          <textarea id="question" rows="3" maxlength="12000" placeholder="例：公開講座について聞きたいです" disabled></textarea>
+          <div class="actions"><button id="mic" type="button" disabled>マイクで入力</button><button id="send" class="primary" disabled>送信する</button></div>
+        </form>
+        <div class="bottom-actions"><button id="human" disabled>担当課に相談したい</button><button id="end" disabled>受付を終了する</button><button id="restart" hidden>新しい受付</button></div>
+      </section>
     </div>
+    <section class="save-panel" aria-label="記録の保存状態"><p id="saveStatus" role="status">まだ記録は作成されていません。</p><button id="retry" hidden>保存を再試行</button><p class="small">「保存完了」が表示されるまで、この画面を閉じないでください。未保存の内容は画面を閉じると失われる場合があります。</p></section>
+    <details class="directory"><summary>各担当課の連絡先を見る</summary><div id="departments"></div><p class="small">電話の自動転送・メール通知・折り返し依頼は行いません。電話ボタンは、お使いの端末の電話アプリを開きます。PCでは番号を確認してお電話ください。</p></details>
   </main>
+  <footer>一般的なお問い合わせ専用です。公開講座の詳細は企画調査課をご案内します。</footer>
 </body>
 </html>
