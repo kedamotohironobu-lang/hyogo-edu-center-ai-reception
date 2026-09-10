@@ -12,7 +12,7 @@
 </head>
 <body>
   <a class="skip" href="#main">受付へ移動</a>
-  <header><div><span class="eyebrow">兵庫県立総合教育センター</span><h1>一般受付</h1></div><span class="badge">試験運用版 0.2</span></header>
+  <header><div><span class="eyebrow">兵庫県立総合教育センター</span><h1>一般受付</h1></div><span class="badge">試験運用版 0.3</span></header>
   <main id="main">
     <section id="setup" class="notice" role="status">接続設定を確認しています。</section>
     <div class="workspace">
@@ -29,7 +29,7 @@
         <div id="consentBox" class="consent">
           <h2>ご利用の前に</h2>
           <p>送信した相談内容・回答・担当課案内を、受付記録としてGoogleスプレッドシートに保存します。氏名や児童生徒を特定できる情報、詳しい心身の情報は入力しないでください。</p>
-          <p>音声入力は端末・ブラウザの音声認識を使用します。音声が外部の認識サービスに送信される場合があります。本システムでは録音ファイルを保存しません。</p>
+          <p>「続けて話す」は音声をGoogleのGeminiへ送信して文字にし、話し終えると自動送信します。「マイクで入力」はブラウザの音声認識を使用し、送信前に修正できます。本システムでは録音ファイルを保存しません。</p>
           <label><input id="consent" type="checkbox"> 上記を確認し、受付記録の保存に同意します</label>
           <button id="start" class="primary" disabled>受付を始める</button>
         </div>
@@ -37,7 +37,9 @@
         <div id="choices" class="choices"></div>
         <section id="handoff" class="handoff" hidden aria-label="担当課のご案内"></section>
         <form id="form">
-          <label for="question">ご用件 <span class="small">音声入力後も、内容を確認してから送信できます。</span></label>
+          <div class="actions"><button id="live" type="button" disabled>続けて話す（自動送信）</button></div>
+          <p id="voicePreview" class="small" role="status"></p>
+          <label for="question">ご用件 <span class="small">文字入力と「マイクで入力」は、確認後に「送信する」を押してください。</span></label>
           <textarea id="question" rows="3" maxlength="12000" placeholder="例：公開講座について聞きたいです" disabled></textarea>
           <div class="actions"><button id="mic" type="button" disabled>マイクで入力</button><button id="send" class="primary" disabled>送信する</button></div>
         </form>

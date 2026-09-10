@@ -20,9 +20,12 @@ export function classify(question, faqs, departments, lastDepartment='') {
   const q=normalize(question); const department=route(question,departments,lastDepartment);
   if(/公開講座/.test(q))return {kind:'handoff',department:'企画調査課',reason:'公開講座の問い合わせ'};
   if(/死にたい|自殺|自傷|虐待|暴力|いじめ|不登校|診断|病歴/.test(q))return {kind:'sensitive',department:'心の教育推進課',reason:'個別・機微な相談'};
-  if(/職員|担当者|人間|人に相談|電話したい|担当課に/.test(q))return {kind:'handoff',department,reason:'職員への相談希望'};
+  if(/職員(と話|に相談|につな|に代わ)|担当者(と話|に相談|につな|に代わ)|人間|人に相談|電話したい|担当課に/.test(q))return {kind:'handoff',department,reason:'職員への相談希望'};
   if(/違う|違いま|解決しない|わからない|分からない|苦情|責任者|例外|個別判断/.test(q))return {kind:'handoff',department,reason:'回答では解決できない・個別判断'};
-  const matches=faqs.filter(f=>terms(f.keywords).some(t=>normalize(t).length>=2&&q.includes(normalize(t))));
+  const scored=faqs.map(f=>({f,terms:terms(f.keywords).map(normalize).filter(t=>t.length>=2&&q.includes(t))})).filter(x=>x.terms.length);
+  // Suppress a generic match only when all its matching terms are contained
+  // in more specific matching terms. Independent topics still require a choice.
+  const matches=scored.filter(x=>!scored.some(y=>y!==x&&x.terms.every(a=>y.terms.some(b=>b!==a&&b.includes(a))))).map(x=>x.f);
   if(matches.length===1){const faq=matches[0];return faq.handoffCondition?{kind:'handoff',department:faq.department,reason:'FAQに担当課確認条件あり'}:{kind:'answer',faq};}
   if(matches.length>1)return {kind:'choices',faqs:matches.slice(0,5)};
   return {kind:'unknown',department};

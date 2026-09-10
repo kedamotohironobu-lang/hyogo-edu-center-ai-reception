@@ -1,9 +1,29 @@
 import {DEPARTMENT_NAMES,chunks,classify,excerpts,SaveQueue,isExpired} from './core.mjs';
+import {LiveTranscription} from './live-transcription.mjs';
 const $=id=>document.getElementById(id), cfg=window.RECEPTION_CONFIG;
 const speech=window.speechSynthesis;
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 let base='', masters={faqs:[],departments:[]}, session=null, starting=false, busy=false, ready=false, recognizer=null, unknownCount=0, finalRequest=null, startRequest=null;
 let speechGeneration=0, activeUtterance=null;
+let live=null, liveConnecting=false, liveResumeTimer=null;
+function pauseLive(){clearTimeout(liveResumeTimer);live?.pause();document.body.classList.remove('listening');}
+function resumeLive(){clearTimeout(liveResumeTimer);liveResumeTimer=setTimeout(()=>{
+  enforceLimit();if(live&&!liveConnecting&&session&&!session.closed&&!busy&&!activeUtterance&&!document.hidden){live.resume();document.body.classList.add('listening');state('お話しください。話し終えると自動で送信します。');}
+},700);}
+function stopLive(){clearTimeout(liveResumeTimer);const old=live;live=null;liveConnecting=false;old?.close();document.body.classList.remove('listening');$('live').textContent='続けて話す（自動送信）';controls();}
+async function toggleLive(){
+  if(live){stopLive();state('連続音声を停止しました。文字でも入力できます。');return;}
+  enforceLimit();if(!session||session.closed||busy)return;
+  closeRecognition();stopSpeech();liveConnecting=true;state('音声受付に接続しています。');
+  const client=new LiveTranscription({base,
+    onPreview:text=>{if(live===client&&!session.closed)$('voicePreview').textContent=text;},
+    onText:text=>{if(live!==client)return;enforceLimit();if(session.closed)return;$('voicePreview').textContent='';$('question').value=text;void submit({preventDefault(){}});},
+    onError:error=>{if(live===client){stopLive();state('連続音声の接続が切れました。文字入力、またはマイクで入力をご利用ください。');$('voicePreview').textContent='音声接続：'+error.message;}}
+  });
+  live=client;$('live').textContent='音声接続を中止';controls();
+  try{await client.start();if(live!==client)return;liveConnecting=false;$('live').textContent='連続音声を止める';controls();resumeLive();}
+  catch(error){if(live===client){stopLive();state('連続音声を開始できませんでした。文字入力、またはマイクで入力をご利用ください。');$('voicePreview').textContent='音声接続：'+error.message;}}
+}
 const limit=Math.min(600,Math.max(1,Number(cfg.maxSeconds)||600));
 const queue=new SaveQueue(({action,payload})=>api(action,payload),q=>{
   if(!session)return;
@@ -12,13 +32,13 @@ const queue=new SaveQueue(({action,payload})=>api(action,payload),q=>{
   $('restart').disabled=q.items.length>0||q.running;
 });
 function state(text){$('state').textContent=text;}
-function stopSpeech(){speechGeneration++;speech?.cancel();activeUtterance=null;document.body.classList.remove('speaking');}
+function stopSpeech(){pauseLive();speechGeneration++;speech?.cancel();activeUtterance=null;document.body.classList.remove('speaking');}
 function speak(text){
-  stopSpeech();if(!$('readAloud').checked||!speech)return;
+  stopSpeech();if(!$('readAloud').checked||!speech){resumeLive();return;}
   const generation=speechGeneration;
   activeUtterance=new SpeechSynthesisUtterance(text);activeUtterance.lang='ja-JP';activeUtterance.rate=1;
   activeUtterance.onstart=()=>{if(generation===speechGeneration)document.body.classList.add('speaking');};
-  const done=()=>{if(generation===speechGeneration){document.body.classList.remove('speaking');activeUtterance=null;}};
+  const done=()=>{if(generation===speechGeneration){document.body.classList.remove('speaking');activeUtterance=null;resumeLive();}};
   activeUtterance.onend=done;activeUtterance.onerror=done;speech.speak(activeUtterance);
 }
 async function api(action,payload={}){
@@ -32,7 +52,8 @@ async function api(action,payload={}){
 function controls(){
   const active=session&&!session.closed&&!busy;
   for(const id of ['question','send','human','end'])$(id).disabled=!active;
-  $('mic').disabled=!active||!Recognition;
+  $('mic').disabled=!active||!Recognition||Boolean(live);
+  $('live').disabled=(!active&&!live)||!window.AudioWorkletNode||!navigator.mediaDevices?.getUserMedia;
   $('start').disabled=!ready||!$('consent').checked||starting;
 }
 function showMessage(speaker,text){
@@ -65,7 +86,7 @@ function closeRecognition(){const r=recognizer;recognizer=null;if(r){r.onresult=
 function expired(){return session&&!session.closed&&isExpired(session.startedAt,Date.now(),limit);}
 function finalize(result,reason='',department=''){
   if(!session||session.closed)return;
-  session.closed=true;busy=false;closeRecognition();clearChoices();
+  session.closed=true;busy=false;stopLive();closeRecognition();clearChoices();
   const endedAt=new Date(),duration=Math.floor((endedAt.getTime()-session.startedAt)/1000);
   finalRequest={requestId:session.requestId,receiptNumber:session.receiptNumber,endedAt:endedAt.toISOString(),category:'一般受付',consultationSummary:excerpts(session.messages,'利用者'),aiAnswerSummary:excerpts(session.messages,'AI'),unresolvedItems:department?'担当課への相談が必要。'+reason:'',department,departmentPhone:masters.departments.find(d=>d.name===department)?.phone||'',handoffReason:reason,overTenMinutes:duration>=600,durationSeconds:Math.min(duration,86400),result};
   queue.add('finalizeReception',finalRequest);$('restart').hidden=false;controls();state('受付を終了しました。担当課への通知・自動転送は行いません。');
@@ -110,7 +131,7 @@ async function submit(event){
     if(unknownCount>=2)handoff(result.department,'FAQで回答を確認できなかった',true);
     else{say('登録されているFAQでは確認できませんでした。ご用件をもう少し具体的にお伝えいただくか、担当課を選んでください。');pickDepartment(name=>handoff(name,'FAQで回答を確認できなかった',true));}
   }
-  busy=false;controls();
+  busy=false;controls();if(!activeUtterance)resumeLive();
 }
 async function start(){
   if(starting||session||!ready||!$('consent').checked)return;
@@ -151,11 +172,13 @@ async function load(){
   finally{clearTimeout(wait);}
 }
 $('consent').onchange=controls;$('start').onclick=start;$('form').onsubmit=submit;$('mic').onclick=microphone;
+$('live').onclick=toggleLive;
+$('question').addEventListener('focus',()=>{if(live){stopLive();state('文字入力に切り替えました。');}});
 $('human').onclick=()=>{enforceLimit();handoff(session?.lastDepartment);};
 $('end').onclick=()=>{enforceLimit();if(!session||session.closed)return;stopSpeech();say('ご利用ありがとうございました。受付を終了し、記録を保存します。');finalize('利用者終了');};
-$('retry').onclick=()=>queue.flush();$('stopSpeech').onclick=stopSpeech;$('readAloud').onchange=()=>{if(!$('readAloud').checked)stopSpeech();};
+$('retry').onclick=()=>queue.flush();$('stopSpeech').onclick=()=>{stopSpeech();resumeLive();};$('readAloud').onchange=()=>{if(!$('readAloud').checked){stopSpeech();resumeLive();}};
 $('restart').onclick=()=>{if(queue.items.length||queue.running)return;stopSpeech();location.reload();};
 window.addEventListener('online',()=>{if(queue.error)void queue.flush();});
 window.addEventListener('beforeunload',e=>{if(starting||(session&&!session.closed)||queue.items.length){e.preventDefault();e.returnValue='';}});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){closeRecognition();stopSpeech();}else enforceLimit();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stopLive();closeRecognition();stopSpeech();}else enforceLimit();});
 window.addEventListener('pageshow',enforceLimit);setInterval(enforceLimit,500);void load();
