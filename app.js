@@ -1,5 +1,7 @@
 import {DEPARTMENT_NAMES,chunks,classify,excerpts,SaveQueue,isExpired} from './core.mjs';
 import {LiveTranscription} from './live-transcription.mjs';
+import {trainingPolicy,improvementQuestion} from './training-policy.mjs';
+let pendingTraining=null;
 const $=id=>document.getElementById(id), cfg=window.RECEPTION_CONFIG;
 const speech=window.speechSynthesis;
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -91,14 +93,14 @@ function finalize(result,reason='',department=''){
   finalRequest={requestId:session.requestId,receiptNumber:session.receiptNumber,endedAt:endedAt.toISOString(),category:'一般受付',consultationSummary:excerpts(session.messages,'利用者'),aiAnswerSummary:excerpts(session.messages,'AI'),unresolvedItems:department?'担当課への相談が必要。'+reason:'',department,departmentPhone:masters.departments.find(d=>d.name===department)?.phone||'',handoffReason:reason,overTenMinutes:duration>=600,durationSeconds:Math.min(duration,86400),result};
   queue.add('finalizeReception',finalRequest);$('restart').hidden=false;controls();state('受付を終了しました。担当課への通知・自動転送は行いません。');
 }
-function handoff(department,reason='職員への相談希望',force=false){
+function handoff(department,reason='職員への相談希望',force=false,preface=''){
   if(!session||session.closed)return;
   closeRecognition();
   if(!department&&!force){say('担当課をご案内します。ご相談先を選んでください。');pickDepartment(name=>handoff(name,reason,true));return;}
   const name=department||session.lastDepartment||'総務課';
   stopSpeech();closeRecognition();const d=masters.departments.find(x=>x.name===name);
   const text='申し訳ありません。私では、これ以上お答えすることが難しいため、'+name+'をご案内します。'+(d?.phone?'電話番号は '+d.phone+' です。':'電話番号は登録確認中です。')+'こちらで音声・文字の受付を終了します。担当課への通知や電話の自動転送は行っていません。';
-  say(text);$('handoff').hidden=false;$('handoff').replaceChildren();departmentCard(name,$('handoff'));
+  say(preface?preface+'\n'+text:text);$('handoff').hidden=false;$('handoff').replaceChildren();departmentCard(name,$('handoff'));
   finalize(reason==='職員への相談希望'?'職員相談希望':'担当課案内',reason,name);
 }
 function enforceLimit(){
@@ -117,16 +119,32 @@ async function submit(event){
   event.preventDefault();enforceLimit();if(!session||session.closed||busy)return;
   const question=$('question').value.trim();if(!question)return;
   closeRecognition();stopSpeech();busy=true;controls();clearChoices();
-  const result=classify(question,masters.faqs,masters.departments,session.lastDepartment);
+  let result=classify(question,masters.faqs,masters.departments,session.lastDepartment);
+  if(!/公開講座/.test(question)&&result.kind!=='sensitive'){
+    const followup=pendingTraining&&!pendingTraining.selectCourse&&/^(小学校|中学校|高校|高等学校|特別支援学校)(です)?[。！!\s]*$/.test(question.trim());
+    const policy=trainingPolicy(followup?question+' '+pendingTraining.question:question,masters.faqs);
+    if(policy)result=policy;
+  }
   const recorded=result.kind==='sensitive'?'【個別・機微な相談のため、入力内容の詳細は記録しません】':question;
   showMessage('利用者',recorded);log('利用者',recorded);$('question').value='';
   if(result.department)session.lastDepartment=result.department;
-  if(result.kind==='answer')answerFaq(result.faq);
+  if(result.kind==='training'){
+    pendingTraining=null;
+    if(result.department){
+      handoff(result.department,'研修の問い合わせ',true,result.faq.answer);
+    }else{
+      pendingTraining={question,selectCourse:result.selectCourse};
+      say(result.faq.answer+'\n'+(result.selectCourse?'開催している課を選んでください。不明な場合は、講座の実施要項で担当課をご確認ください。':'所属する校種を教えてください。小学校・中学校、高校、特別支援学校から選べます。'),result.faq.id);
+      const names=result.selectCourse?DEPARTMENT_NAMES:['義務教育研修課','高校教育研修課','特別支援教育研修課'];
+      for(const name of names){const b=document.createElement('button');b.type='button';b.textContent=name;b.onclick=()=>{pendingTraining=null;handoff(name,'研修の問い合わせ',true);};$('choices').append(b);}
+    }
+  }else if(result.kind==='answer'){pendingTraining=null;answerFaq(result.faq);}
   else if(result.kind==='choices'){
     say('近い内容が複数見つかりました。画面からご用件を選んでください。');
     for(const f of result.faqs){const b=document.createElement('button');b.type='button';b.textContent=f.label||f.keywords;b.onclick=()=>answerFaq(f);$('choices').append(b);}
   }else if(result.kind==='handoff'||result.kind==='sensitive')handoff(result.department,result.reason,true);
   else{
+    queue.add('addFaqImprovement',{requestId:session.requestId,receiptNumber:session.receiptNumber,candidateId:crypto.randomUUID(),question:improvementQuestion(question),category:'一般受付',department:result.department||'',reason:'登録FAQに一致せず回答できなかった。質問は最大900文字。全文は会話ログ参照。'});
     unknownCount++;
     if(unknownCount>=2)handoff(result.department,'FAQで回答を確認できなかった',true);
     else{say('登録されているFAQでは確認できませんでした。ご用件をもう少し具体的にお伝えいただくか、担当課を選んでください。');pickDepartment(name=>handoff(name,'FAQで回答を確認できなかった',true));}
