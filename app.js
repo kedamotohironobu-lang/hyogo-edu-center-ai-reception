@@ -1,3 +1,5 @@
+import {setupMobileUI} from './mobile-ui.mjs';
+let mobileUI=null;
 import {DEPARTMENT_NAMES,chunks,classify,excerpts,SaveQueue,isExpired} from './core.mjs';
 import {LiveTranscription} from './live-transcription.mjs';
 import {trainingPolicy,improvementQuestion} from './training-policy.mjs';
@@ -20,11 +22,11 @@ async function toggleLive(){
   const client=new LiveTranscription({base,
     onPreview:text=>{if(live===client&&!session.closed)$('voicePreview').textContent=text;},
     onText:text=>{if(live!==client)return;enforceLimit();if(session.closed)return;$('voicePreview').textContent='';$('question').value=text;void submit({preventDefault(){}});},
-    onError:error=>{if(live===client){stopLive();state('連続音声の接続が切れました。文字入力、またはマイクで入力をご利用ください。');$('voicePreview').textContent='音声接続：'+error.message;}}
+    onError:error=>{if(live===client){stopLive();state('連続音声の接続が切れました。文字入力、またはマイクで入力をご利用ください。');$('voicePreview').textContent='音声接続：'+error.message;mobileUI?.fallback();}}
   });
   live=client;$('live').textContent='音声接続を中止';controls();
   try{await client.start();if(live!==client)return;liveConnecting=false;$('live').textContent='連続音声を止める';controls();resumeLive();}
-  catch(error){if(live===client){stopLive();state('連続音声を開始できませんでした。文字入力、またはマイクで入力をご利用ください。');$('voicePreview').textContent='音声接続：'+error.message;}}
+  catch(error){if(live===client){stopLive();state('連続音声を開始できませんでした。文字入力、またはマイクで入力をご利用ください。');$('voicePreview').textContent='音声接続：'+error.message;mobileUI?.fallback();}}
 }
 const limit=Math.min(600,Math.max(1,Number(cfg.maxSeconds)||600));
 const queue=new SaveQueue(({action,payload})=>api(action,payload),q=>{
@@ -33,7 +35,7 @@ const queue=new SaveQueue(({action,payload})=>api(action,payload),q=>{
   $('retry').hidden=!q.error;
   $('restart').disabled=q.items.length>0||q.running;
 });
-function state(text){$('state').textContent=text;}
+function state(text){$('state').textContent=text;mobileUI?.update();}
 function stopSpeech(){pauseLive();speechGeneration++;speech?.cancel();activeUtterance=null;document.body.classList.remove('speaking');}
 function speak(text){
   stopSpeech();if(!$('readAloud').checked||!speech){resumeLive();return;}
@@ -41,7 +43,7 @@ function speak(text){
   activeUtterance=new SpeechSynthesisUtterance(text);activeUtterance.lang='ja-JP';activeUtterance.rate=1;
   activeUtterance.onstart=()=>{if(generation===speechGeneration)document.body.classList.add('speaking');};
   const done=()=>{if(generation===speechGeneration){document.body.classList.remove('speaking');activeUtterance=null;resumeLive();}};
-  activeUtterance.onend=done;activeUtterance.onerror=done;speech.speak(activeUtterance);
+  activeUtterance.onend=done;activeUtterance.onerror=e=>{if(generation!==speechGeneration)return;done();if(!['canceled','interrupted'].includes(e.error))mobileUI?.fallback('音声の読み上げを開始できませんでした。回答をチャットでご確認ください。');};speech.speak(activeUtterance);
 }
 async function api(action,payload={}){
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),cfg.requestTimeoutMs||35000);
@@ -57,6 +59,7 @@ function controls(){
   $('mic').disabled=!active||!Recognition||Boolean(live);
   $('live').disabled=(!active&&!live)||!window.AudioWorkletNode||!navigator.mediaDevices?.getUserMedia;
   $('start').disabled=!ready||!$('consent').checked||starting;
+  mobileUI?.update();
 }
 function showMessage(speaker,text){
   const block=document.createElement('div');block.className='message'+(speaker==='利用者'?' user':'');
@@ -199,4 +202,5 @@ $('restart').onclick=()=>{if(queue.items.length||queue.running)return;stopSpeech
 window.addEventListener('online',()=>{if(queue.error)void queue.flush();});
 window.addEventListener('beforeunload',e=>{if(starting||(session&&!session.closed)||queue.items.length){e.preventDefault();e.returnValue='';}});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopLive();closeRecognition();stopSpeech();}else enforceLimit();});
+mobileUI=setupMobileUI({getState:()=>({session,ready,starting,busy,live,liveConnecting}),toggleLive,stopLive,stopSpeech,closeRecognition});
 window.addEventListener('pageshow',enforceLimit);setInterval(enforceLimit,500);void load();
