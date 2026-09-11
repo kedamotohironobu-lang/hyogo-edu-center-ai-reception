@@ -1,7 +1,12 @@
+function voiceErrorMessage(error){
+  const code=error?.name==='NotAllowedError'?'MIC_PERMISSION_DENIED':error?.name==='NotFoundError'?'MIC_NOT_FOUND':error?.name==='NotReadableError'?'MIC_BUSY':error?.message||'VOICE_UNKNOWN';
+  const messages={MIC_PERMISSION_DENIED:'マイクの使用が許可されていません。ブラウザのマイク許可をご確認ください。',MIC_NOT_FOUND:'マイクが見つかりません。',MIC_BUSY:'マイクを開始できません。他の通話や録音を終了してお試しください。',VOICE_BROWSER_UNSUPPORTED:'このブラウザでは音声処理を利用できません。',VOICE_PROCESSOR_LOAD_FAILED:'音声処理ファイルを読み込めませんでした。更新ファイルの配置をご確認ください。',VOICE_TOKEN_HTTP_404:'音声接続先が見つかりません。Workerの音声機能をご確認ください。'};
+  return (messages[code]||'音声に接続できませんでした。文字で相談できます。')+'（確認コード：'+(/^[A-Za-z0-9_-]{1,80}$/.test(code)?code:'VOICE_START_FAILED')+'）';
+}
 import {setupMobileUI} from './mobile-ui.mjs';
 let mobileUI=null;
 import {DEPARTMENT_NAMES,chunks,classify,excerpts,SaveQueue,isExpired} from './core.mjs';
-import {LiveTranscription} from './live-transcription.mjs';
+import {LiveTranscription} from './live-transcription.mjs?v=voice-fix-1';
 import {trainingPolicy,improvementQuestion} from './training-policy.mjs';
 let pendingTraining=null;
 const $=id=>document.getElementById(id), cfg=window.RECEPTION_CONFIG;
@@ -22,11 +27,11 @@ async function toggleLive(){
   const client=new LiveTranscription({base,
     onPreview:text=>{if(live===client&&!session.closed)$('voicePreview').textContent=text;},
     onText:text=>{if(live!==client)return;enforceLimit();if(session.closed)return;$('voicePreview').textContent='';$('question').value=text;void submit({preventDefault(){}});},
-    onError:error=>{if(live===client){stopLive();state('連続音声の接続が切れました。文字入力、またはマイクで入力をご利用ください。');$('voicePreview').textContent='音声接続：'+error.message;mobileUI?.fallback();}}
+    onError:error=>{if(live===client){stopLive();state('連続音声の接続が切れました。文字入力、またはマイクで入力をご利用ください。');$('voicePreview').textContent='音声接続：'+error.message;mobileUI?.fallback(voiceErrorMessage(error));}}
   });
   live=client;$('live').textContent='音声接続を中止';controls();
   try{await client.start();if(live!==client)return;liveConnecting=false;$('live').textContent='連続音声を止める';controls();resumeLive();}
-  catch(error){if(live===client){stopLive();state('連続音声を開始できませんでした。文字入力、またはマイクで入力をご利用ください。');$('voicePreview').textContent='音声接続：'+error.message;mobileUI?.fallback();}}
+  catch(error){if(live===client){stopLive();state('連続音声を開始できませんでした。文字入力、またはマイクで入力をご利用ください。');$('voicePreview').textContent='音声接続：'+error.message;mobileUI?.fallback(voiceErrorMessage(error));}}
 }
 const limit=Math.min(600,Math.max(1,Number(cfg.maxSeconds)||600));
 const queue=new SaveQueue(({action,payload})=>api(action,payload),q=>{

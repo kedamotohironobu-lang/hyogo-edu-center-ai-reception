@@ -13,12 +13,18 @@ export class LiveTranscription {
   }
   async start(){
     try{
-      this.context=new AudioContext({sampleRate:16000});await this.context.resume();
-      const stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true},video:false});
+      const Context=globalThis.AudioContext||globalThis.webkitAudioContext;
+      if(!Context||!navigator.mediaDevices?.getUserMedia)throw new Error('VOICE_BROWSER_UNSUPPORTED');
+      this.context=new Context();
+      const resumed=this.context.resume();
+      const permission=navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true},video:false});
+      const results=await Promise.allSettled([resumed,permission]);
+      const stream=results[1].status==='fulfilled'?results[1].value:null;
+      if(results[0].status==='rejected'||!stream){stream?.getTracks().forEach(t=>t.stop());throw results.find(x=>x.status==='rejected').reason;}
       if(this.closed){stream.getTracks().forEach(t=>t.stop());return;}
       this.stream=stream;
-      if(this.context.sampleRate!==16000)throw new Error('AUDIO_RATE_UNSUPPORTED');
-      await this.context.audioWorklet.addModule(new URL('./pcm-worklet.js',import.meta.url));
+      if(!this.context.audioWorklet||!globalThis.AudioWorkletNode)throw new Error('VOICE_BROWSER_UNSUPPORTED');
+      try{await this.context.audioWorklet.addModule(new URL('./pcm-worklet.js?v=voice-fix-1',import.meta.url));}catch(_){throw new Error('VOICE_PROCESSOR_LOAD_FAILED');}
       if(this.closed)return;
       this.source=this.context.createMediaStreamSource(stream);
       this.node=new AudioWorkletNode(this.context,'reception-pcm');
@@ -34,7 +40,8 @@ export class LiveTranscription {
       let data;
       try{
         const response=await fetch(this.base+'/api/gemini-live-token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({purpose:'general-reception-transcribe-v0.3'}),signal:this.abort.signal});
-        data=await response.json();if(!response.ok||!data.ok)throw new Error(data.code||'VOICE_TOKEN_FAILED');
+        try{data=await response.json();}catch(_){throw new Error('VOICE_TOKEN_HTTP_'+response.status);}
+        if(!response.ok||!data.ok)throw new Error(data.code||'VOICE_TOKEN_HTTP_'+response.status);
       }finally{clearTimeout(timeout);}
       if(this.closed)return;
       if(!/^auth_tokens\/[A-Za-z0-9._~-]+$/.test(data.token||''))throw new Error('VOICE_TOKEN_INVALID');

@@ -1,4 +1,5 @@
 .mobile-mode-bar,.mobile-voice-controls,.mobile-fallback{display:none}
+.mobile-accessible-label{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 @media(max-width:720px){
   :root{background:#f0f6f7}
   body{margin:0}header{padding:14px 18px 8px;margin:0}header h1{font-size:19px;margin:4px 0}header .eyebrow{font-size:11px}header .badge{font-size:10px}
@@ -10,7 +11,7 @@
   .workspace{display:flex;flex-direction:column;border:none;background:transparent;overflow:visible;box-shadow:none}
   .assistant-panel{display:flex;flex-direction:column;padding:0;background:radial-gradient(ellipse at 50% 38%,#fff 0%,#e5f0f0 60%,#f0f6f7 85%);gap:0}
   .assistant-panel .portrait{width:100%;height:clamp(220px,39svh,400px);grid-row:auto;margin:0;overflow:hidden}
-  .portrait picture{display:block;height:100%}.portrait #guide{height:100%;width:100%;object-fit:contain;animation:none!important;transform:none!important}
+  .portrait picture{display:block;height:100%}.portrait #guide{height:100%;width:100%;object-fit:contain;animation:none;transform:none}
   .assistant-panel>h2,.assistant-panel>#state,.assistant-panel>.wave,.assistant-panel>.preferences,.assistant-panel>p.small{display:none}
   .mobile-voice-controls{display:flex;flex-direction:column;align-items:center;width:100%;padding:0 8px 12px;box-sizing:border-box}
   #mobileReply{background:#fff;border-radius:20px;padding:14px 17px;line-height:1.75;font-size:15px;margin:0;max-height:23svh;overflow:auto;width:100%;box-sizing:border-box;box-shadow:0 4px 24px #234c5910;white-space:pre-wrap;text-align:left}
@@ -45,4 +46,50 @@
   body[data-mobile-mode=chat] #voicePreview:empty{display:none}
   .reception-closed #mobileVoice,.reception-closed #mobileStopSpeech,.reception-closed .mobile-voice-controls>.small{display:none}
   [hidden]{display:none!important}
+}
+/* Mobile character view: a full-height stage with no visible conversation text. */
+@media(max-width:720px){
+  body[data-mobile-mode=character]{background:#e7f1f3}
+  body[data-mobile-mode=character] header,
+  body[data-mobile-mode=character] footer,
+  body[data-mobile-mode=character] #setup,
+  body[data-mobile-mode=character] .save-panel,
+  body[data-mobile-mode=character] .directory,
+  body[data-mobile-mode=character] .session-bar,
+  body[data-mobile-mode=character] .bottom-actions,
+  body[data-mobile-mode=character] #choices,
+  body[data-mobile-mode=character] #handoff,
+  body[data-mobile-mode=character] #mobileReply,
+  body[data-mobile-mode=character] .mobile-voice-controls>.small,
+  body[data-mobile-mode=character] #mobileModeLabel{display:none!important}
+  body[data-mobile-mode=character] #mobileStatus{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);margin:0}
+  body[data-mobile-mode=character] main{padding:0;max-width:none;min-height:100svh}
+  body[data-mobile-mode=character] .workspace{margin:0;border-radius:0}
+  body[data-mobile-mode=character] .assistant-panel{min-height:100svh;box-sizing:border-box;justify-content:flex-end;background:radial-gradient(ellipse at 50% 40%,#fff 0%,#e6f0f2 75%);padding:calc(42px + env(safe-area-inset-top)) 0 calc(130px + env(safe-area-inset-bottom))}
+  body[data-mobile-mode=character] .portrait{height:calc(100svh - 180px - env(safe-area-inset-top) - env(safe-area-inset-bottom));min-height:150px;max-height:none;width:100%;overflow:hidden}
+  body[data-mobile-mode=character] .portrait #guide{object-fit:contain;object-position:center bottom;padding:12px 8px;box-sizing:border-box;transform-origin:50% 88%;animation:mobile-breathe 5.5s ease-in-out infinite;will-change:transform}
+  body[data-mobile-mode=character].listening .portrait #guide{animation:mobile-listen 3.2s ease-in-out infinite}
+  body[data-mobile-mode=character].speaking .portrait #guide{animation:mobile-talk 1.8s ease-in-out infinite}
+  body[data-mobile-mode=character] .mobile-mode-bar{position:fixed;top:calc(10px + env(safe-area-inset-top));right:14px;z-index:5;padding:0}
+  .mobile-mode-bar button{display:inline-flex;align-items:center;justify-content:center;min-width:48px;min-height:48px;padding:10px}
+  body[data-mobile-mode=character] .mobile-voice-controls{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:min(100%,360px);display:grid;grid-template-columns:1fr 100px 1fr;gap:14px;align-items:center;padding:0 18px;z-index:4}
+  body[data-mobile-mode=character] #mobileVoice{grid-column:2;grid-row:1;width:88px;height:88px;min-height:88px;justify-self:center;display:grid;place-items:center;border-radius:50%;padding:0;background:#166b73;box-shadow:0 0 0 9px #fff9,0 8px 28px #166b7330;transition:background .2s}
+  #mobileVoice svg{width:34px;height:34px}
+  body[data-mobile-mode=character] #mobileVoice[aria-pressed=true]{background:#9a444b}
+  body[data-mobile-mode=character].listening #mobileVoice{box-shadow:0 0 0 9px #166b7322,0 0 0 16px #166b7310}
+  body[data-mobile-mode=character] #mobileStopSpeech{grid-column:1;grid-row:1}
+  body[data-mobile-mode=character] #mobileEnd{grid-column:3;grid-row:1}
+  #mobileEnd,#mobileStopSpeech{border:1px solid #8aabb5;background:#ffffffb8;border-radius:50%;width:48px;height:48px;padding:10px;justify-self:center;display:grid;place-items:center;color:#285260}
+  body[data-mobile-mode=character]:not(.reception-active) #mobileEnd,
+  body[data-mobile-mode=character]:not(.speaking) #mobileStopSpeech{visibility:hidden}
+  body[data-mobile-mode=character].mobile-consent-open .conversation{position:fixed;inset:0;z-index:10;background:#17334488;padding:24px 16px;box-sizing:border-box;overflow:auto;justify-content:center}
+  body[data-mobile-mode=character].mobile-consent-open #consentBox:not([hidden]){max-height:85svh;overflow:auto;margin:auto;width:100%;box-sizing:border-box;font-size:16px}
+  body[data-mobile-mode=chat] #mobileSwitch .mobile-accessible-label{position:static;width:auto;height:auto;clip-path:none;white-space:normal;margin-left:8px}
+  body[data-mobile-mode=chat] .mobile-mode-bar{font-size:14px}
+  @keyframes mobile-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-3px) scale(1.008)}}
+  @keyframes mobile-listen{0%,100%{transform:rotate(-.7deg)}45%,65%{transform:rotate(.7deg) translateY(2px)}}
+  @keyframes mobile-talk{0%,100%{transform:translateY(0) rotate(0)}30%{transform:translateY(4px) rotate(.5deg)}65%{transform:translateY(-2px) rotate(-.3deg)}}
+}
+@media(max-width:720px) and (prefers-reduced-motion:reduce){
+ body[data-mobile-mode=character] .portrait #guide{animation:none!important;transform:none!important;will-change:auto}
 }
