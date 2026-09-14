@@ -47,7 +47,8 @@ function speak(text){
   const generation=speechGeneration;
   activeUtterance=new SpeechSynthesisUtterance(text);activeUtterance.lang='ja-JP';activeUtterance.rate=1;
   activeUtterance.onstart=()=>{if(generation===speechGeneration)document.body.classList.add('speaking');};
-  const done=()=>{if(generation===speechGeneration){document.body.classList.remove('speaking');activeUtterance=null;resumeLive();}};
+  activeUtterance.onboundary=()=>{if(generation===speechGeneration)window.dispatchEvent(new Event('reception-speech-boundary'));};
+  const done=()=>{if(generation===speechGeneration){document.body.classList.remove('speaking');activeUtterance=null;window.dispatchEvent(new Event('reception-character-smile'));resumeLive();}};
   activeUtterance.onend=done;activeUtterance.onerror=e=>{if(generation!==speechGeneration)return;done();if(!['canceled','interrupted'].includes(e.error))mobileUI?.fallback('音声の読み上げを開始できませんでした。回答をチャットでご確認ください。');};speech.speak(activeUtterance);
 }
 async function api(action,payload={}){
